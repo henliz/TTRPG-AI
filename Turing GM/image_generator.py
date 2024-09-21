@@ -46,3 +46,5 @@ def describe_and_generate(scene_description):
     image_path = generate_image_from_scene(scene_description)
 
     return image_path
+
+#end of file

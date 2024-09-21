@@ -1,86 +1,80 @@
 from gm_tts import synthesize_speech, recognize_speech, stop_flag
-from response_generator import generate_response
 from file_manager import extract_text_from_pdf
+from image_generator import generate_image_from_scene
 import threading
-import random
+from dotenv import load_dotenv
+import os
 
-# Store conversation history for context
-conversation_history = []
+from response_generator import generate_response
 
+# Load environment variables from .env file
+load_dotenv()
 
 def gm_loop(game_system, rulebook_text):
     print(f"Starting {game_system} Game Master session...")
 
-    # Introductory blurb
+    # Introductory message
     intro_message = (
-        f"Hey there! It's Turing, your trusty Game Master. "
-        "Are you ready to dive into some epic adventures? What would you like to do?"
+        f"Hello! I am Turing, your Game Master for {game_system}. "
+        "What adventure shall we embark on today?"
     )
-    threading.Thread(target=synthesize_speech, args=(intro_message,)).start()  # Run TTS in a separate thread
-    print(intro_message)
+    threading.Thread(target=synthesize_speech, args=(intro_message,)).start()
+    print(intro_message)  # Visible feedback
 
     while True:
-        user_input = recognize_speech()
-
-        if user_input:
-            stop_flag.set()  # Stop ongoing TTS playback when the player starts speaking
-
-            # Define the prompt for the Game Master
-            prompt = f"The player asks: '{user_input}'. Respond in character."
-
-            # Check for specific interactions
-            if "necromancer" in user_input.lower() or "barkeep" in user_input.lower():
-                # Prompt for a charisma check
-                charisma_check = random.randint(1, 20) + 2  # Example: Add a bonus to the roll
-                response = f"You notice the barkeep is not telling you everything... Make a Charisma check!"
-                print(f"Game Master: {response}")
-                synthesize_speech(response)
-
-                # Here, you could ask for player input for the skill check
-                skill_check_input = recognize_speech()
-                if "roll" in skill_check_input.lower() or "check" in skill_check_input.lower():
-                    # Assume player decides to roll
-                    if charisma_check >= 15:  # Example success threshold
-                        response = "The barkeep relaxes a bit and shares more details about the necromancer..."
-                    else:
-                        response = "The barkeep remains tight-lipped and gives you a wary look."
+        try:
+            user_input = recognize_speech()  # Listen for input
+            if user_input:
+                stop_flag.set()  # Stop any ongoing TTS playback when the player speaks
+                if "exit" in user_input.lower():
+                    print("Exiting Game Master session.")
+                    break  # Exit condition
+                elif "describe" in user_input.lower():
+                    # For scene description requests
+                    prompt = f"Describe a scene in the {game_system} setting. The player says: {user_input}."
+                    mode = "descriptive"
+                    response = generate_response(prompt, mode)
                     print(f"Game Master: {response}")
-                    synthesize_speech(response)
-                    continue  # Continue to the next interaction
 
-            # Continue normal conversation
-            response = generate_response(prompt, "concise")
-            print(f"Game Master: {response}")
+                    # Speak the description
+                    stop_flag.clear()
+                    threading.Thread(target=synthesize_speech, args=(response,)).start()
 
-            # Restart TTS for the new response
-            stop_flag.clear()
-            threading.Thread(target=synthesize_speech, args=(response,)).start()
+                    # Generate an image based on the scene description
+                    image_path = generate_image_from_scene(response)
+                    print(f"Scene image saved at: {image_path}")
+                else:
+                    # For general conversation
+                    prompt = f"You are a witty game master for {game_system}. The player says: {user_input}. Respond concisely."
+                    response = generate_response(prompt)
+                    print(f"Game Master: {response}")
+
+                    stop_flag.clear()
+                    threading.Thread(target=synthesize_speech, args=(response,)).start()
+        except Exception as e:
+            print(f"Error: {e}")
+            continue
+
 
 
 def start_gm():
-    # Start session and ask for game selection
-    synthesize_speech("Hi, I'm Turing. Do you want to play Cyberpunk RED or D&D 5e?")
     print("What game system would you like to play? Cyberpunk RED or D&D 5e?")
+    synthesize_speech("What game system would you like to play? Cyberpunk RED or D&D 5e?")
 
-    game_system = recognize_speech()
+    game_system = input("Enter 'Cyberpunk RED' or 'D&D 5e': ")
 
-    if "cyberpunk" in game_system.lower():
-        rulebook_path = "C:/Users/Henrietta/Desktop/CyberpunkRED_Rulebook.pdf"
-        game_system = "Cyberpunk RED"
-    elif "d&d" in game_system.lower() or "dungeons" in game_system.lower():
-        rulebook_path = "C:/Users/Henrietta/Desktop/DnD5e_Rulebook.pdf"
-        game_system = "D&D 5e"
+    if game_system == "Cyberpunk RED":
+        rulebook_path = r"C:\Users\Henrietta\Desktop\CyberpunkRED_Rulebook.pdf"
+    elif game_system == "D&D 5e":
+        rulebook_path = r"C:\Users\Henrietta\Desktop\DnD5e_Rulebook.pdf"
     else:
-        synthesize_speech("Sorry, I didn't catch that. Please say either Cyberpunk or D&D.")
+        print("Invalid choice. Please select either 'Cyberpunk RED' or 'D&D 5e'.")
         return
 
     rulebook_text = extract_text_from_pdf(rulebook_path)
-    print(rulebook_text)  # Optionally use this text if needed
 
     gm_loop(game_system, rulebook_text)
 
 
 if __name__ == "__main__":
     start_gm()
-
-
